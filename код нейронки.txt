@@ -1,0 +1,47 @@
+#проверка GPU
+!nvidia-smi
+
+#импортирование google диска
+from google.colab import drive
+drive.mount('/content/gdrive')
+!ln -s /content/gdrive/My\ Drive/ /mydrive
+!ls /mydrive
+
+# клонирования репозитория разработчика yolo
+!git clone https://github.com/AlexeyAB/darknet
+
+# конфигурация файлов
+%cd darknet
+!sed -i 's/OPENCV=0/OPENCV=1/' Makefile
+!sed -i 's/GPU=0/GPU=1/' Makefile
+!sed -i 's/CUDNN=0/CUDNN=1/' Makefile
+
+# компиляция
+!make
+
+# делаем копию файла yolov3.cfg
+!cp cfg/yolov3.cfg cfg/yolov3_training.cfg
+
+# создаем файл имен и данных
+!echo -e 'smoking' > data/obj.names
+!echo -e 'classes= 1\ntrain  = data/train.txt\nvalid  = data/test.txt\nnames = data/obj.names\nbackup = /mydrive/yolov3' > data/obj.data
+
+#сохраняем конфигурацию и имена объектов на гугл диск
+!cp cfg/yolov3_training.cfg /mydrive/yolov3/yolov3_testing.cfg
+!cp data/obj.names /mydrive/yolov3/classes.txt
+
+#создание папки для распаковки архива
+!mkdir data/obj
+!unzip /mydrive/yolov3/images.zip -d data/obj
+
+#создание файла train.txt
+import glob
+images_list = glob.glob("data/obj/*.jpg")
+with open("data/train.txt", "w") as f:
+    f.write("\n".join(images_list))
+
+# загрузка предобученных весов для сверточных слоев
+!wget https://pjreddie.com/media/files/darknet53.conv.74
+
+#обучение
+!./darknet detector train data/obj.data cfg/yolov3_training.cfg darknet53.conv.74 -dont_show
