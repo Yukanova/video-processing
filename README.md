@@ -6,3 +6,9 @@
 
 После обработки сохраняется видео с ограничивающими рамками:
 ![alt text](https://raw.githubusercontent.com/Yukanova/video-processing/main/output_video.gif)
+
+Также сохраняются тайм-коды детекции в текстовый файл и базу данных sqlite:
+
+![alt text](https://raw.githubusercontent.com/Yukanova/video-processing/main/%D0%B1%D0%B4.png)
+
+![alt text](https://raw.githubusercontent.com/Yukanova/video-processing/main/time.png)
