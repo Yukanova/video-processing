@@ -1,0 +1,175 @@
+#!/bin/python
+import cv2
+import numpy as np
+import time
+import tkinter as tk
+import sqlite3
+
+path_to_cfg = "C:/Users/user/Desktop/project/yolov3_testing.cfg" # Путь к файлу конфигурации модели
+path_to_weights = "C:/Users/user/Desktop/project/yolov3_training_last.weights" #Путь к файлу с весами модели
+
+initial_video = "C:/Users/user/Desktop/project/test1.mp4"  # путь к обрабатываемому видеофайлу
+out_video = "output_video_new.mp4"
+out_text_file = "detection_time.txt"
+
+CANVAS_WIDTH = 8
+CANVAS_HEIGHT = 150
+
+# Подключение к базе данных или создание новой, если она не существует
+conn = sqlite3.connect('mydatabase.db')
+cursor = conn.cursor()
+
+
+# Создание таблицы, если она еще не существует
+cursor.execute('''CREATE TABLE IF NOT EXISTS mytable (id INTEGER PRIMARY KEY, value1 TEXT, value2 TEXT)''')
+
+def run():
+    global  path_to_weights,  path_to_cfg, initial_video, out_video, out_text_file
+
+    # считывание пользовательского ввода
+    path_to_cfg = str(ex.get())
+    path_to_weights = str(ea.get())
+    u = str(ex1.get())
+    out_video = ex2.get()
+    out_text_file = ex3.get()
+
+    net = cv2.dnn.readNet(path_to_weights, path_to_cfg)
+
+    classes = []
+    with open("C:/Users/user/Desktop/project/classes.txt", "r") as f:
+        classes = f.read().splitlines()
+
+    # Открываем видеофайл для чтения
+    cap = cv2.VideoCapture('C:/Users/user/Desktop/project/test2.mp4')
+
+    font = cv2.FONT_HERSHEY_PLAIN
+    colors = np.random.uniform(0, 255, size=(100, 3))
+
+    # Получаем информацию о видео (размеры кадра, частота кадров и т.д.)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = int(cap.get(cv2.CAP_PROP_FPS))
+
+    # Создаем объект VideoWriter для записи видео
+    out = cv2.VideoWriter('C:/Users/user/Desktop/project/output_video_new.mp4', cv2.VideoWriter_fourcc(*'mp4v'), fps,
+                          (width, height))
+
+    starting_time = time.time()
+    frame_id = 0
+    while cap.isOpened():
+        frame_id += 1
+        ret, img = cap.read()
+        if not ret:
+            break
+
+        current_time = 0
+        # img = cv2.imread("test_images/2.jpg")
+        # height, width, _ = img.shape
+
+        blob = cv2.dnn.blobFromImage(img, 1 / 255, (416, 416), (0, 0, 0), swapRB=True, crop=False)
+        net.setInput(blob)
+        output_layers_names = net.getUnconnectedOutLayersNames()
+        layerOutputs = net.forward(output_layers_names)
+
+        boxes = []
+        confidences = []
+        class_ids = []
+
+        for output in layerOutputs:
+            for detection in output:
+                scores = detection[5:]
+                class_id = np.argmax(scores)
+                confidence = scores[class_id]
+                if confidence > 0.2:
+                    center_x = int(detection[0] * width)
+                    center_y = int(detection[1] * height)
+                    w = int(detection[2] * width)
+                    h = int(detection[3] * height)
+
+                    x = int(center_x - w / 2)
+                    y = int(center_y - h / 2)
+
+                    boxes.append([x, y, w, h])
+                    confidences.append((float(confidence)))
+                    class_ids.append(class_id)
+
+        indexes = cv2.dnn.NMSBoxes(boxes, confidences, 0.2, 0.4)
+
+        if len(indexes) > 0:
+            for i in indexes.flatten():
+                x, y, w, h = boxes[i]
+                label = str(classes[class_ids[i]])
+                confidence = str(round(confidences[i], 2))
+                color = colors[i]
+                cv2.rectangle(img, (x, y), (x + w, y + h), color, 2)
+                cv2.putText(img, label + " ", (x, y + 20), font, 1, (255, 255, 255), 2)
+                current_time = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000
+                with open("C:/Users/user/Desktop/project/detection_time.txt", "r+") as file:
+                    file.seek(0, 2)
+                    file.write('test2.mp4 ' + str(round(current_time, 2)) + '\n')
+                    file.close()
+                # Ввод значений для записи в базу данных
+                value1 = 'test2.mp4'
+                value2 = str(round(current_time, 2))
+                # Запись значений в базу данных
+                cursor.execute('''INSERT INTO mytable (value1, value2) VALUES (?, ?)''', (value1, value2))
+                conn.commit()
+
+        #cv2.putText(img, f'Time: {int(current_time)}', (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        elapsed_time = time.time() - starting_time
+        fps_in_moment = frame_id / elapsed_time
+        # Для отображения FPS
+        cv2.putText(img, "FPS:" + str(round(fps_in_moment, 2)), (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+
+        out.write(img)
+        cv2.imshow('Video', img)
+        key = cv2.waitKey(1)
+        if key == 27:
+            break
+
+    conn.close()
+    cap.release()
+    out.release()
+    cv2.destroyAllWindows()
+
+root = tk.Tk()
+root.title('Детектирование нежелательного контента')
+frame1 = tk.Frame(root)
+frame1.grid(row=0, column=1, sticky=tk.N, padx=10, pady=10)
+
+canvas = tk.Canvas(root, width=CANVAS_WIDTH, height=CANVAS_HEIGHT, bg='#B0C4DE')
+canvas.grid(row=0, column=0, sticky=tk.N, rowspan=16)
+
+tk.Label(frame1, text='Путь к файлу конфигурации модели').grid(row=1, column=1)
+ex = tk.Entry(frame1, textvariable=tk.StringVar(), bg='#B0C4DE',width=30, bd=3)
+ex.delete(0, tk.END)
+ex.insert(0, path_to_cfg)
+ex.grid(row=1, column=2)
+
+tk.Label(frame1, text='Путь к файлу с весами модели').grid(row=2, column=1)
+ea = tk.Entry(frame1, textvariable=tk.StringVar(), bg='#B0C4DE', width=30, bd=3)
+ea.delete(0, tk.END)
+ea.insert(0, str(path_to_weights))
+ea.grid(row=2, column=2)
+
+tk.Label(frame1, text='Путь к обрабатываемому видеофайлу').grid(row=3, column=1)
+ex1 = tk.Entry(frame1, textvariable=tk.StringVar(), bg='#B0C4DE', width=30, bd=3)
+ex1.delete(0, tk.END)
+ex1.insert(0, str(initial_video))
+ex1.grid(row=3, column=2)
+
+tk.Label(frame1, text='Имя обработанного видеофайла').grid(row=4, column=1)
+ex2 = tk.Entry(frame1, textvariable=tk.StringVar() , bg='#B0C4DE', width=30, bd=3)
+ex2.delete(0, tk.END)
+ex2.insert(0, str(out_video))
+ex2.grid(row=4, column=2)
+
+tk.Label(frame1, text='Файл с тайм-кодами детекции').grid(row=5, column=1)
+ex3 = tk.Entry(frame1, textvariable=tk.StringVar() , bg='#B0C4DE', width=30, bd=3)
+ex3.delete(0, tk.END)
+ex3.insert(0, str(out_text_file))
+ex3.grid(row=5, column=2)
+
+tk.Button(frame1, text="Запустить процесс детекции \u27a4", width=24, bg='#B0C4DE', command=run).grid(row=7, column=1)
+
+root.mainloop()
